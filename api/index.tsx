@@ -94,7 +94,7 @@ app.frame("speakers", async (c) => {
       <Button value="unsure">Unsure</Button>,
       speaker?.twitter !== undefined && <Button.Link href={`https://x.com/${speaker.twitter}`}>Twitter</Button.Link>,
     ] : [
-      <TextInput placeholder="Suggest a speaker from Asia, especially SEA" />,
+      <TextInput placeholder="Enter the speaker contact" />,
       // <Button value="submit">Submit</Button>,
       <Button.Reset>Submit</Button.Reset>,
     ]
@@ -106,6 +106,9 @@ app.image("speaker-image/:sid", async (c) => {
   const currentSpeaker = id !== "null" ? await fetchSpeaker(id) : undefined;
 
   return c.res({
+    headers: {
+      'Cache-Control': 'max-age=0'
+    },
     image: (
       <Box
         grow
@@ -129,7 +132,7 @@ app.image("speaker-image/:sid", async (c) => {
             />
             <Heading decoration="underline" size="32" font="wittgenstein">{currentSpeaker.name}</Heading>
             {currentSpeaker.description && <Text color="text200" overflow='ellipsis'>{currentSpeaker.description}</Text>}
-          </VStack> : <Heading size="32">Thanks for your valuable suggestions</Heading>
+          </VStack> : <Heading size="32">Thanks for your valuable suggestions, know any speaker from Asia, especially SEA?</Heading>
         }
       </Box>
     )
