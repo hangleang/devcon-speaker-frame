@@ -15,7 +15,7 @@ const MAX = 1088;
 const SIZE = 10;
 const BG_IMAGE_URL = "https://devcon.org/_next/image/?url=%2F_next%2Fstatic%2Fmedia%2Ffooter-bg.2061d385.png&w=3840&q=75"
 
-type Speaker = {
+type SpeakerDetail = {
   id: string;
   sourceId: string;
   name: string;
@@ -24,46 +24,86 @@ type Speaker = {
   twitter?: string;
 }
 
+type Speaker = {
+  id: string;
+  twitter?: string;
+}
+
 type State = {
   loaded: boolean;
   currentIdx: number;
-  speakerIds: string[];
+  speakers: Speaker[];
 }
 
 export const app = new Frog<{ State: State }>({
+  title: "Devcon Speaker suggestions",
   assetsPath: '/',
   basePath: '/api',
   ui: { vars },
-  headers: {
-    "Content-Types": "image/png"
-  },
   initialState: {
     loaded: false,
     currentIdx: 0,
-    speakerIds: [],
+    speakers: [],
   }
 })
 
 app.frame('/', async (c) => {
-  const { buttonValue, inputText, status, deriveState } = c
-  const feedback = inputText || buttonValue
+  return c.res({
+    action: '/speakers',
+    image: (
+      <Box
+        grow
+        overflow='hidden'
+        alignHorizontal="center"
+        alignVertical='center'
+        padding="32"
+        backgroundColor="background"
+        backgroundPosition="center"
+        backgroundRepeat='no-repeat'
+        backgroundImage={`linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.2)), url('${BG_IMAGE_URL}')`}
+      >
+        <Heading size="32">Welcome to Devcon Speaker Suggestions</Heading>
+      </Box>
+    ),
+    intents: [
+      <Button value="checkout">Check out previous speakers</Button>,
+    ],
+  })
+})
 
+app.frame("speakers", async (c) => {
+  const { buttonValue, inputText, deriveState } = c
+  const feedback = inputText || buttonValue
+  
   const state = await deriveState(async previousState => {
     if (!previousState.loaded) {
       const randomFromIdx = Math.random() * (MAX - MIN) + MIN
-      previousState.speakerIds = await fetchSpeakers(randomFromIdx)
+      previousState.speakers = await fetchSpeakers(randomFromIdx)
       previousState.currentIdx = 0
       previousState.loaded = true
     } else {
       previousState.currentIdx += 1
     }
   })
+  const speaker = state.currentIdx < state.speakers.length ? state.speakers[state.currentIdx] : undefined;
 
-  const currentSpeaker = state.loaded && state.currentIdx < state.speakerIds.length
-    ? await fetchSpeaker(state.speakerIds[state.currentIdx]) 
-    : undefined
+  return c.res({
+    image: `/speaker-image/${speaker?.id || "null"}`,
+    intents: state.currentIdx < state.speakers.length ? [
+      <Button value="agree">Agree</Button>,
+      <Button value="unsure">Unsure</Button>,
+      speaker?.twitter !== undefined && <Button.Link href={`https://x.com/${speaker.twitter}`}>Twitter</Button.Link>,
+    ] : [
+      <TextInput placeholder="Suggest a speaker from Asia, especially SEA" />,
+      // <Button value="submit">Submit</Button>,
+      <Button.Reset>Submit</Button.Reset>,
+    ]
+  })
+})
 
-  console.log(currentSpeaker)
+app.image("speaker-image/:sid", async (c) => {
+  const id = c.req.param('sid');
+  const currentSpeaker = id !== "null" ? await fetchSpeaker(id) : undefined;
 
   return c.res({
     image: (
@@ -79,7 +119,6 @@ app.frame('/', async (c) => {
         backgroundImage={`linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.2)), url('${BG_IMAGE_URL}')`}
       >
         {
-          status === 'initial' ? <Heading size="32">Welcome to Devcon Speaker Suggestions</Heading> :
           currentSpeaker ? <VStack gap="4" alignHorizontal='center'>
             <Image
               height="128"
@@ -93,22 +132,11 @@ app.frame('/', async (c) => {
           </VStack> : <Heading size="32">Thanks for your valuable suggestions</Heading>
         }
       </Box>
-    ),
-    intents: status === 'initial' ? [
-      status === 'initial' && <Button value="checkout">Check out previous speakers</Button>,
-    ] : state.currentIdx < state.speakerIds.length && currentSpeaker ? [
-      <Button value="agree">Agree</Button>,
-      <Button value="unsure">Unsure</Button>,
-      currentSpeaker.twitter !== undefined && <Button.Link href={`https://x.com/${currentSpeaker.twitter}`}>Twitter</Button.Link>,
-    ] : [
-      <TextInput placeholder="Suggest a speaker from Asia, especially SEA" />,
-      // <Button value="submit">Submit</Button>,
-      <Button.Reset>Submit</Button.Reset>,
-    ],
-  })
+    )
+  });
 })
 
-const fetchSpeakers = async (from: number = 0, size: number = SIZE): Promise<string[]> => {
+const fetchSpeakers = async (from: number = 0, size: number = SIZE): Promise<Speaker[]> => {
   const url = `https://api.devcon.org/speakers?from=${from}&size=${size}`;
   try {
     const response = await fetch(url);
@@ -121,7 +149,10 @@ const fetchSpeakers = async (from: number = 0, size: number = SIZE): Promise<str
     if (json.status != "200") {
       throw new Error(`Response error: ${json.message}`);
     }
-    const speakers = json.data.items.map((item: any) => item.id);
+    const speakers: Speaker[] = json.data.items.map((item: any) => ({
+      id: item.id,
+      twitter: item.twitter || undefined
+    }));
     return shuffleArray(speakers);
   } catch (error: any) {
     console.error(error.message);
@@ -129,7 +160,7 @@ const fetchSpeakers = async (from: number = 0, size: number = SIZE): Promise<str
   }
 }
 
-const fetchSpeaker = async (id: string): Promise<Speaker> => {
+const fetchSpeaker = async (id: string): Promise<SpeakerDetail> => {
   const url = `https://api.devcon.org/speakers/${id}`;
   try {
     const response = await fetch(url);
@@ -143,7 +174,7 @@ const fetchSpeaker = async (id: string): Promise<Speaker> => {
       throw new Error(`Response error: ${json.message}`);
     }
     const { id, sourceId, name, avatar, description, twitter } = json.data
-    const speaker: Speaker = { 
+    const speaker: SpeakerDetail = { 
       id, sourceId, name, avatar, 
       description: description || undefined,
       twitter: twitter || undefined
