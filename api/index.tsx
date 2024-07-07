@@ -92,7 +92,7 @@ app.frame("speakers", async (c) => {
     intents: state.currentIdx < state.speakers.length ? [
       <Button value="agree">Agree</Button>,
       <Button value="unsure">Unsure</Button>,
-      speaker?.twitter !== undefined && <Button.Redirect location={`https://x.com/${speaker.twitter}`}>Twitter</Button.Redirect>,
+      speaker?.twitter !== undefined && <Button.Link href={`https://x.com/${speaker.twitter}`}>Twitter</Button.Link>,
     ] : [
       <TextInput placeholder="Enter the speaker contact" />,
       // <Button value="submit">Submit</Button>,
@@ -106,6 +106,9 @@ app.image("speaker-image/:sid", async (c) => {
   const currentSpeaker = id !== "null" ? await fetchSpeaker(id) : undefined;
 
   return c.res({
+    headers: {
+      'Cache-Control': 'max-age=0'
+    },
     image: (
       <Box
         grow
