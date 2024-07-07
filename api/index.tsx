@@ -31,10 +31,9 @@ type State = {
 }
 
 export const app = new Frog<{ State: State }>({
+  title: "Devcon Speakers Suggestion",
   assetsPath: '/',
   basePath: '/api',
-  // Supply a Hub to enable frame verification.
-  // hub: neynar({ apiKey: 'NEYNAR_FROG_FM' })
   ui: { vars },
   initialState: {
     loaded: false,
@@ -62,14 +61,17 @@ app.frame('/', async (c) => {
     ? await fetchSpeaker(state.speakerIds[state.currentIdx]) 
     : undefined
 
+  console.log(currentSpeaker)
+
   return c.res({
     image: (
       <Box
         grow
+        overflow='hidden'
         alignHorizontal="center"
         alignVertical='center'
+        padding="12"
         backgroundColor="background"
-        padding="32"
         backgroundPosition="center"
         backgroundRepeat='no-repeat'
         backgroundImage={`linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.2)), url('${BG_IMAGE_URL}')`}
@@ -85,17 +87,17 @@ app.frame('/', async (c) => {
               src={currentSpeaker.avatar}
             />
             <Heading decoration="underline" size="32" font="wittgenstein">{currentSpeaker.name}</Heading>
-            {currentSpeaker.description && <Text color="text200" wrap>{currentSpeaker.description}</Text>}
+            {currentSpeaker.description && <Text color="text200" overflow='ellipsis'>{currentSpeaker.description}</Text>}
           </VStack> : <Heading size="32">Thanks for your valuable suggestions</Heading>
         }
       </Box>
     ),
     intents: status === 'initial' ? [
-      <Button value="checkout">Check out previous speakers</Button>,
-    ] : state.currentIdx < state.speakerIds.length ? [
-      <Button value="suggest">Suggest</Button>,
+      status === 'initial' && <Button value="checkout">Check out previous speakers</Button>,
+    ] : state.currentIdx < state.speakerIds.length && currentSpeaker ? [
+      <Button value="agree">Agree</Button>,
       <Button value="unsure">Unsure</Button>,
-      currentSpeaker?.twitter && <Button.Link href={`https://x.com/${currentSpeaker.twitter}`}>Twitter</Button.Link>,
+      currentSpeaker.twitter !== undefined && <Button.Link href={`https://x.com/${currentSpeaker.twitter}`}>Twitter</Button.Link>,
     ] : [
       <TextInput placeholder="Suggest a speaker from Asia, especially SEA" />,
       // <Button value="submit">Submit</Button>,
