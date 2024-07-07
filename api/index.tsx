@@ -31,7 +31,6 @@ type State = {
 }
 
 export const app = new Frog<{ State: State }>({
-  title: "Devcon Speakers Suggestion",
   assetsPath: '/',
   basePath: '/api',
   ui: { vars },
@@ -67,9 +66,6 @@ app.frame('/', async (c) => {
   console.log(currentSpeaker)
 
   return c.res({
-    headers: {
-      'Content-Type': 'image/png'
-    },
     image: (
       <Box
         grow
