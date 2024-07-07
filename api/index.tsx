@@ -35,6 +35,9 @@ export const app = new Frog<{ State: State }>({
   assetsPath: '/',
   basePath: '/api',
   ui: { vars },
+  headers: {
+    "Content-Types": "image/png"
+  },
   initialState: {
     loaded: false,
     currentIdx: 0,
@@ -64,13 +67,16 @@ app.frame('/', async (c) => {
   console.log(currentSpeaker)
 
   return c.res({
+    headers: {
+      'Content-Type': 'image/png'
+    },
     image: (
       <Box
         grow
         overflow='hidden'
         alignHorizontal="center"
         alignVertical='center'
-        padding="12"
+        padding="32"
         backgroundColor="background"
         backgroundPosition="center"
         backgroundRepeat='no-repeat'

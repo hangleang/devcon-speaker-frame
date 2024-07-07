@@ -4,11 +4,11 @@
   "type": "module",
   "scripts": {
     "build": "frog vercel-build",
-    "dev": "frog dev",
+    "dev": "NODE_OPTIONS='--max-http-header-size=51200' frog dev",
     "deploy": "vercel"
   },
   "dependencies": {
-    "frog": "latest",
+    "frog": "0.11.7-fix-valibot.20240614T131805",
     "hono": "^4"
   },
   "devDependencies": {
