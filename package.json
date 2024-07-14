@@ -8,6 +8,7 @@
     "deploy": "vercel"
   },
   "dependencies": {
+    "@vercel/kv": "^2.0.0",
     "frog": "latest",
     "hono": "^4"
   },

@@ -2,7 +2,8 @@ import { Button, Frog, TextInput } from 'frog'
 import { devtools } from 'frog/dev'
 import { serveStatic } from 'frog/serve-static'
 import { handle } from 'frog/vercel'
-import { Box, Heading, Text, VStack, Image, vars } from './ui.js'
+import { Box, Heading, Text, VStack, Image, vars, HStack } from './ui.js'
+import { kv } from "@vercel/kv";
 // import { neynar } from 'frog/hubs'
 
 // Uncomment to use Edge Runtime.
@@ -14,6 +15,7 @@ const MIN = 0
 const MAX = 1088;
 const SIZE = 10;
 const BG_IMAGE_URL = "https://devcon.org/_next/image/?url=%2F_next%2Fstatic%2Fmedia%2Ffooter-bg.2061d385.png&w=3840&q=75"
+const SEA_SPEAKERS_SLUG = 'sea-speakers-slug'
 
 type SpeakerDetail = {
   id: string;
@@ -22,12 +24,21 @@ type SpeakerDetail = {
   avatar: string;
   description?: string;
   twitter?: string;
+  // kv store
+  suggested: number;
+  appeared: number;
 }
 
 type Speaker = {
   id: string;
   twitter?: string;
 }
+
+type SpeakerStore = {
+  suggested: number;
+  appeared: number;
+}
+const DEFAULT_STORE: SpeakerStore = { suggested: 0, appeared: 0 }
 
 type State = {
   loaded: boolean;
@@ -49,7 +60,7 @@ export const app = new Frog<{ State: State }>({
 
 app.frame('/', async (c) => {
   return c.res({
-    action: '/speakers',
+    action: `/speakers`,
     image: (
       <Box
         grow
@@ -72,31 +83,44 @@ app.frame('/', async (c) => {
 })
 
 app.frame("speakers", async (c) => {
-  const { buttonValue, inputText, deriveState } = c
-  const feedback = inputText || buttonValue
+  const { buttonValue, deriveState } = c
   
-  const state = await deriveState(async previousState => {
-    if (!previousState.loaded) {
+  const state = await deriveState(async prev => {
+    if (!prev.loaded) {
       const randomFromIdx = Math.random() * (MAX - MIN) + MIN
-      previousState.speakers = await fetchSpeakers(randomFromIdx)
-      previousState.currentIdx = 0
-      previousState.loaded = true
-    } else {
-      previousState.currentIdx += 1
+      prev.speakers = await fetchSpeakers()
+      prev.currentIdx = 0
+      prev.loaded = true
+    } else if (prev.currentIdx < prev.speakers.length) {
+      prev.currentIdx++
     }
   })
   const speaker = state.currentIdx < state.speakers.length ? state.speakers[state.currentIdx] : undefined;
+
+  if (buttonValue != undefined && state.currentIdx > 0 && state.currentIdx <= state.speakers.length) {
+    try {
+      const prevSpeakerId = state.speakers[state.currentIdx - 1].id;
+      let speakerScore: SpeakerStore = await kv.get<SpeakerStore>(prevSpeakerId) || DEFAULT_STORE;
+      if (buttonValue === "agree") {
+        speakerScore.suggested += 1;
+      }
+      speakerScore.appeared += 1;
+      await kv.set<SpeakerStore>(prevSpeakerId, speakerScore);
+    } catch (error: any) {
+      console.error(error.message);
+      throw new Error(error);
+    }
+  }
 
   return c.res({
     image: `/speaker-image/${speaker?.id || "null"}`,
     intents: state.currentIdx < state.speakers.length ? [
       <Button value="agree">Agree</Button>,
       <Button value="unsure">Unsure</Button>,
-      speaker?.twitter !== undefined && <Button.Link href={`https://x.com/${speaker.twitter}`}>Twitter</Button.Link>,
+      speaker?.twitter !== undefined && <Button.Link href={twitterUrl(speaker.twitter)}>Twitter</Button.Link>,
     ] : [
-      <TextInput placeholder="Enter the speaker contact" />,
-      // <Button value="submit">Submit</Button>,
-      <Button.Reset>Submit</Button.Reset>,
+      <TextInput placeholder="Enter his/her contact" />,
+      <Button action='/result' value="submit">Submit</Button>,
     ]
   })
 })
@@ -104,6 +128,7 @@ app.frame("speakers", async (c) => {
 app.image("speaker-image/:sid", async (c) => {
   const id = c.req.param('sid');
   const currentSpeaker = id !== "null" ? await fetchSpeaker(id) : undefined;
+  console.log(currentSpeaker)
 
   return c.res({
     headers: {
@@ -130,13 +155,65 @@ app.image("speaker-image/:sid", async (c) => {
               objectFit="cover"
               src={currentSpeaker.avatar}
             />
-            <Heading decoration="underline" size="32" font="wittgenstein">{currentSpeaker.name}</Heading>
+            <HStack gap="8" grow>
+              <Heading decoration="underline" size="32" font="wittgenstein">{currentSpeaker.name}</Heading>
+              {currentSpeaker.suggested > 0 && <Box
+                backgroundColor="background200"
+                borderRadius="18"
+                height="36"
+                width="36"
+                alignHorizontal="center"
+                alignVertical='center'
+              >
+                <Text font="wittgenstein">+{currentSpeaker.suggested}</Text>
+              </Box>}
+            </HStack>
             {currentSpeaker.description && <Text color="text200" overflow='ellipsis'>{currentSpeaker.description}</Text>}
-          </VStack> : <Heading size="32">Thanks for your valuable suggestions, know any speaker from Asia, especially SEA?</Heading>
+          </VStack> : <Heading size="32">Do you know any speaker from Asia, especially SEA?</Heading>
         }
       </Box>
     )
   });
+})
+
+app.frame("result", async (c) => {
+  const { inputText, deriveState } = c
+
+  if (inputText) {
+    let seaSpeakers = await kv.get<string[]>(SEA_SPEAKERS_SLUG) || [];
+    seaSpeakers.push(inputText);
+    await kv.set<string[]>(SEA_SPEAKERS_SLUG, seaSpeakers);
+  }
+  const state = deriveState();
+  const speakers = await Promise.all(state.speakers.map(async s => ({
+    id: s.id,
+    score: await kv.get<SpeakerStore>(s.id) || DEFAULT_STORE
+  })))
+
+  return c.res({
+    image: (
+      <Box
+        grow
+        overflow='hidden'
+        alignHorizontal="center"
+        alignVertical='center'
+        padding="10"
+        backgroundColor="background"
+        backgroundPosition="center"
+        backgroundRepeat='no-repeat'
+        backgroundImage={`linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.2)), url('${BG_IMAGE_URL}')`}
+      >
+        <VStack gap="0" alignHorizontal='center'>
+          <Heading size="24">Thanks for your valuable suggestions</Heading>
+          { speakers.map(s => <Text font="wittgenstein">{`${s.id} got ${s.score.suggested} suggested out of ${s.score.appeared} appeared`}</Text>) }
+          { inputText && <Text font="wittgenstein">{`SEA speaker suggested: ${inputText}`}</Text> }
+        </VStack>
+      </Box>
+    ),
+    intents: [
+      <Button.Reset>Refresh</Button.Reset>,
+    ]
+  })
 })
 
 const fetchSpeakers = async (from: number = 0, size: number = SIZE): Promise<Speaker[]> => {
@@ -163,8 +240,8 @@ const fetchSpeakers = async (from: number = 0, size: number = SIZE): Promise<Spe
   }
 }
 
-const fetchSpeaker = async (id: string): Promise<SpeakerDetail> => {
-  const url = `https://api.devcon.org/speakers/${id}`;
+const fetchSpeaker = async (sid: string): Promise<SpeakerDetail> => {
+  const url = `https://api.devcon.org/speakers/${sid}`;
   try {
     const response = await fetch(url);
     if (!response.ok) {
@@ -172,15 +249,19 @@ const fetchSpeaker = async (id: string): Promise<SpeakerDetail> => {
     }
 
     const json = await response.json();
-
     if (json.status != "200") {
       throw new Error(`Response error: ${json.message}`);
     }
+
     const { id, sourceId, name, avatar, description, twitter } = json.data
+    const speakerScore = await kv.get<SpeakerStore>(sid);
+    
     const speaker: SpeakerDetail = { 
       id, sourceId, name, avatar, 
       description: description || undefined,
-      twitter: twitter || undefined
+      twitter: twitter || undefined,
+      suggested: speakerScore?.suggested || 0,
+      appeared: speakerScore?.appeared || 0,
     }
     return speaker;
   } catch (error: any) {
@@ -201,6 +282,13 @@ function shuffleArray<T>(array: T[]): T[] {
   }
 
   return shuffledArray;
+}
+
+const twitterUrl = (usernameOrUrl: string): string => {
+  if (!usernameOrUrl.startsWith("https")) {
+    usernameOrUrl = `https://x.com/${usernameOrUrl}`
+  }
+  return usernameOrUrl;
 }
 
 // @ts-ignore
